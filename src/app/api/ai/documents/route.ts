@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createAIService, AI_SERVICES } from '@/lib/ai-service'
 
 export async function POST(request: NextRequest) {
   try {
-    const { description, answers } = await request.json()
+    const { description, answers, aiService, customConfig } = await request.json()
 
     if (!description || !answers) {
       return NextResponse.json(
         { error: '缺少必要参数' },
+        { status: 400 }
+      )
+    }
+
+    // 验证服务选择
+    const serviceKey = aiService || 'openrouter'
+    if (!AI_SERVICES[serviceKey as keyof typeof AI_SERVICES]) {
+      return NextResponse.json(
+        { error: '不支持的 AI 服务' },
         { status: 400 }
       )
     }
@@ -43,39 +53,13 @@ ${Object.entries(answers).map(([key, value]) => `Q: ${key}\nA: ${value}`).join('
 
     const documents: Record<string, string> = {}
 
+    // 创建 AI 服务实例
+    const aiClient = createAIService(serviceKey, customConfig)
+
     for (const doc of documentTypes) {
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || '',
-            'X-Title': 'VibeGuide',
-          },
-          body: JSON.stringify({
-            model: 'anthropic/claude-3.5-sonnet',
-            messages: [
-              {
-                role: 'system',
-                content: '你是一个专业的产品经理和技术架构师。请基于提供的项目信息生成专业的技术文档，使用markdown格式。'
-              },
-              {
-                role: 'user',
-                content: `${contextInfo}\n\n${doc.prompt}`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000,
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          documents[doc.type] = data.choices[0]?.message?.content || `# ${doc.type}\n\n生成失败，请稍后重试。`
-        } else {
-          documents[doc.type] = `# ${doc.type}\n\n生成失败，请稍后重试。`
-        }
+        const content = await aiClient.generateDocument(contextInfo, doc.prompt)
+        documents[doc.type] = content || `# ${doc.type}\n\n生成失败，请稍后重试。`
       } catch (error) {
         documents[doc.type] = `# ${doc.type}\n\n生成失败，请稍后重试。`
       }

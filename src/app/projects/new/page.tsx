@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react'
-import { generateQuestions, generateDocuments } from '@/lib/ai'
+import { generateQuestions, generateDocuments, type CustomAIConfig } from '@/lib/ai'
+import { AIServiceSelector } from '@/components/ai-service-selector'
 
 interface AIQuestion {
   id: string
@@ -23,6 +24,10 @@ export default function NewProjectPage() {
   // 步骤1：项目基本信息
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  
+  // AI 服务配置
+  const [selectedAIService, setSelectedAIService] = useState('openrouter')
+  const [customAIConfig, setCustomAIConfig] = useState<CustomAIConfig>({})
   
   // 步骤2：AI问题
   const [questions, setQuestions] = useState<AIQuestion[]>([])
@@ -42,10 +47,22 @@ export default function NewProjectPage() {
       alert('项目描述至少需要20个字符')
       return
     }
+
+    // 验证自定义配置
+    if (selectedAIService === 'custom') {
+      if (!customAIConfig.baseURL || !customAIConfig.apiKey || !customAIConfig.model) {
+        alert('使用自定义服务时，请填写完整的配置信息')
+        return
+      }
+    }
     
     setLoading(true)
     try {
-      const aiQuestions = await generateQuestions(description)
+      const aiQuestions = await generateQuestions(
+        description, 
+        selectedAIService === 'custom' ? undefined : selectedAIService,
+        selectedAIService === 'custom' ? customAIConfig : undefined
+      )
       setQuestions(aiQuestions)
       setCurrentStep(2)
     } catch (error) {
@@ -65,7 +82,12 @@ export default function NewProjectPage() {
     
     setLoading(true)
     try {
-      const generatedDocs = await generateDocuments(description, answers)
+      const generatedDocs = await generateDocuments(
+        description, 
+        answers,
+        selectedAIService === 'custom' ? undefined : selectedAIService,
+        selectedAIService === 'custom' ? customAIConfig : undefined
+      )
       setDocuments(generatedDocs)
       setCurrentStep(3)
     } catch (error) {
@@ -207,6 +229,15 @@ export default function NewProjectPage() {
                     {description.length}/20 个字符（至少20个字符）
                   </div>
                 </div>
+
+                {/* AI 服务选择器 */}
+                <AIServiceSelector
+                  selectedService={selectedAIService}
+                  onServiceChange={setSelectedAIService}
+                  customConfig={customAIConfig}
+                  onCustomConfigChange={setCustomAIConfig}
+                />
+
                 <div className="flex justify-end">
                   <Button 
                     onClick={handleStep1Next}

@@ -14,13 +14,50 @@ export interface AIResponse {
   }
 }
 
-export async function generateQuestions(projectDescription: string): Promise<AIQuestion[]> {
+export interface AIServiceOption {
+  key: string
+  name: string
+  baseURL: string
+  model: string
+}
+
+export interface CustomAIConfig {
+  name?: string
+  baseURL?: string
+  apiKey?: string
+  model?: string
+}
+
+export const AI_SERVICE_OPTIONS: AIServiceOption[] = [
+  {
+    key: 'openrouter',
+    name: 'OpenRouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    model: 'anthropic/claude-3.5-sonnet'
+  },
+  {
+    key: 'moonshot',
+    name: 'Moonshot (Kimi)',
+    baseURL: 'https://api.moonshot.cn/v1',
+    model: 'kimi-k2-0711-preview'
+  }
+]
+
+export async function generateQuestions(
+  projectDescription: string,
+  aiService?: string,
+  customConfig?: CustomAIConfig
+): Promise<AIQuestion[]> {
   const response = await fetch('/api/ai/questions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ description: projectDescription }),
+    body: JSON.stringify({ 
+      description: projectDescription,
+      aiService,
+      customConfig 
+    }),
   })
 
   if (!response.ok) {
@@ -33,7 +70,9 @@ export async function generateQuestions(projectDescription: string): Promise<AIQ
 
 export async function generateDocuments(
   projectDescription: string,
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  aiService?: string,
+  customConfig?: CustomAIConfig
 ): Promise<{
   userJourney: string
   prd: string
@@ -46,7 +85,12 @@ export async function generateDocuments(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ description: projectDescription, answers }),
+    body: JSON.stringify({ 
+      description: projectDescription, 
+      answers,
+      aiService,
+      customConfig 
+    }),
   })
 
   if (!response.ok) {
