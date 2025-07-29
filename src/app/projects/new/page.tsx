@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react'
-import { generateQuestions, generateDocuments, type CustomAIConfig } from '@/lib/ai'
+import { generateQuestions, generateSingleDocument, type CustomAIConfig } from '@/lib/ai'
 import { AIServiceSelector } from '@/components/ai-service-selector'
 
 interface AIQuestion {
@@ -41,6 +41,14 @@ export default function NewProjectPage() {
     backend?: string
     database?: string
   }>({})
+  const [currentDocumentType, setCurrentDocumentType] = useState('userJourney')
+  const [documentGenerationStatus, setDocumentGenerationStatus] = useState<Record<string, 'pending' | 'loading' | 'completed' | 'error'>>({
+    userJourney: 'pending',
+    prd: 'pending', 
+    frontend: 'pending',
+    backend: 'pending',
+    database: 'pending'
+  })
 
   const handleStep1Next = async () => {
     if (description.length < 20) {
@@ -80,21 +88,53 @@ export default function NewProjectPage() {
       return
     }
     
-    setLoading(true)
+    setCurrentStep(3)
+    // 开始生成第一个文档
+    setTimeout(() => generateDocument('userJourney'), 500)
+  }
+
+  const generateDocument = async (documentType: string) => {
+    setDocumentGenerationStatus(prev => ({
+      ...prev,
+      [documentType]: 'loading'
+    }))
+    
     try {
-      const generatedDocs = await generateDocuments(
-        description, 
+      const result = await generateSingleDocument(
+        description,
         answers,
+        documentType,
         selectedAIService === 'custom' ? undefined : selectedAIService,
         selectedAIService === 'custom' ? customAIConfig : undefined
       )
-      setDocuments(generatedDocs)
-      setCurrentStep(3)
+      
+      setDocuments(prev => ({
+        ...prev,
+        [documentType]: result.content
+      }))
+      
+      setDocumentGenerationStatus(prev => ({
+        ...prev,
+        [documentType]: 'completed'
+      }))
     } catch (error) {
-      console.error('Failed to generate documents:', error)
-      alert('生成文档失败，请稍后重试')
-    } finally {
-      setLoading(false)
+      console.error(`Failed to generate ${documentType}:`, error)
+      setDocumentGenerationStatus(prev => ({
+        ...prev,
+        [documentType]: 'error'
+      }))
+    }
+  }
+
+  const generateAllDocuments = async () => {
+    const documentTypes = ['userJourney', 'prd', 'frontend', 'backend', 'database']
+    
+    for (const docType of documentTypes) {
+      if (documentGenerationStatus[docType] !== 'completed') {
+        await generateDocument(docType)
+        // 延迟一秒，避免同时发送太多请求
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
     }
   }
 
@@ -320,9 +360,9 @@ export default function NewProjectPage() {
             {currentStep === 3 && (
               <div className="space-y-6">
                 <div className="text-center mb-8">
-                  <h2 className="text-xl font-semibold mb-2">文档生成完成</h2>
+                  <h2 className="text-xl font-semibold mb-2">AI 文档生成中</h2>
                   <p className="text-muted-foreground">
-                    AI已为你生成了完整的项目开发文档
+                    AI 正在逐份为你生成项目开发文档，请耐心等待
                   </p>
                 </div>
 
@@ -335,22 +375,120 @@ export default function NewProjectPage() {
                       { key: 'frontend', label: '前端设计文档' },
                       { key: 'backend', label: '后端设计文档' },
                       { key: 'database', label: '数据库设计' },
-                    ].map(({ key, label }) => (
-                      <button
-                        key={key}
-                        className="py-2 px-1 border-b-2 border-transparent font-medium text-sm hover:text-primary hover:border-primary"
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    ].map(({ key, label }) => {
+                      const status = documentGenerationStatus[key]
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setCurrentDocumentType(key)}
+                          className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                            currentDocumentType === key
+                              ? 'border-primary text-primary'
+                              : 'border-transparent hover:text-primary hover:border-primary'
+                          }`}
+                        >
+                          <span>{label}</span>
+                          {status === 'loading' && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          {status === 'completed' && (
+                            <Check className="h-3 w-3 text-green-500" />
+                          )}
+                          {status === 'error' && (
+                            <span className="h-3 w-3 text-red-500">!</span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </nav>
+                </div>
+
+                {/* 文档生成按钮 */}
+                <div className="space-y-3 mb-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-medium text-muted-foreground">文档生成</h3>
+                    <Button
+                      onClick={generateAllDocuments}
+                      size="sm"
+                      disabled={Object.values(documentGenerationStatus).some(status => status === 'loading')}
+                    >
+                      {Object.values(documentGenerationStatus).some(status => status === 'loading') ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        '一键生成所有文档'
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 'userJourney', label: '用户旅程地图' },
+                      { key: 'prd', label: '产品需求PRD' },
+                      { key: 'frontend', label: '前端设计文档' },
+                      { key: 'backend', label: '后端设计文档' },
+                      { key: 'database', label: '数据库设计' },
+                    ].map(({ key, label }) => {
+                      const status = documentGenerationStatus[key]
+                      return (
+                        <Button
+                          key={key}
+                          variant={status === 'completed' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => generateDocument(key)}
+                          disabled={status === 'loading'}
+                        >
+                          {status === 'loading' && (
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          )}
+                          {status === 'completed' && (
+                            <Check className="mr-2 h-3 w-3" />
+                          )}
+                          {status === 'error' && (
+                            <span className="mr-2 text-red-500">重新生成</span>
+                          )}
+                          {status === 'pending' && '生成'}
+                          {status !== 'pending' && status !== 'error' && ''}
+                          {label}
+                        </Button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 {/* 文档内容预览 */}
                 <div className="bg-muted/30 rounded-lg p-6 max-h-96 overflow-y-auto">
-                  <pre className="whitespace-pre-wrap text-sm">
-                    {documents.userJourney || '正在生成文档...'}
-                  </pre>
+                  {documentGenerationStatus[currentDocumentType] === 'loading' ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                        <p className="text-muted-foreground">正在生成文档...</p>
+                      </div>
+                    </div>
+                  ) : documentGenerationStatus[currentDocumentType] === 'error' ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <p className="text-red-500 mb-4">文档生成失败</p>
+                        <Button onClick={() => generateDocument(currentDocumentType)}>
+                          重新生成
+                        </Button>
+                      </div>
+                    </div>
+                  ) : documents[currentDocumentType as keyof typeof documents] ? (
+                    <pre className="whitespace-pre-wrap text-sm">
+                      {documents[currentDocumentType as keyof typeof documents]}
+                    </pre>
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <p className="text-muted-foreground mb-4">点击上方按钮生成文档</p>
+                        <Button onClick={() => generateDocument(currentDocumentType)}>
+                          生成文档
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 操作按钮 */}
@@ -361,7 +499,8 @@ export default function NewProjectPage() {
                     </Button>
                     <Button 
                       variant="outline"
-                      onClick={() => downloadDocument(documents.userJourney || '', 'user-journey.md')}
+                      onClick={() => downloadDocument(documents[currentDocumentType as keyof typeof documents] || '', `${currentDocumentType}.md`)}
+                      disabled={!documents[currentDocumentType as keyof typeof documents]}
                     >
                       下载当前文档
                     </Button>

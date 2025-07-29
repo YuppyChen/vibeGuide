@@ -100,3 +100,32 @@ export async function generateDocuments(
   const data = await response.json()
   return data.documents
 }
+
+export async function generateSingleDocument(
+  projectDescription: string,
+  answers: Record<string, string>,
+  documentType: string,
+  aiService?: string,
+  customConfig?: CustomAIConfig
+): Promise<{ documentType: string; content: string }> {
+  const response = await fetch('/api/ai/document', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      description: projectDescription, 
+      answers,
+      documentType,
+      aiService,
+      customConfig 
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to generate document')
+  }
+
+  const data = await response.json()
+  return data
+}
