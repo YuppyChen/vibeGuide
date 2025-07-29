@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/**": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "NEXT_PUBLIC_SITE_URL": "https://vibe-guide.vercel.app"
+  }
+}
